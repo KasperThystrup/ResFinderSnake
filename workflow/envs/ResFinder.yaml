@@ -1,0 +1,10 @@
+channels:
+ - conda-forge
+ - bioconda
+dependencies:
+ - python>=3.5
+ - biopython>=1.8
+ - kma
+ - blast
+ - resfinder
+ - tabulate=0.7.7

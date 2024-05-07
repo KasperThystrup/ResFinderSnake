@@ -1,0 +1,8 @@
+sample_dir:
+db_dir:
+species:
+id_thresh:
+  99
+cov_thresh:
+  99
+outdir:

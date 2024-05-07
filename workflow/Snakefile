@@ -1,0 +1,180 @@
+import glob, os, re
+
+configfile: "config/config.yaml"
+
+sample_dir = config["sample_dir"]
+db_dir = config["db_dir"]
+spe = config["species"]
+outdir = config["outdir"]
+
+species = ""
+if spe is not None:
+	species = "%s/" %spe
+
+sample_files = glob.glob("%s/*fasta" %sample_dir)
+samples = [os.path.basename(re.sub(r"\.fasta", "", sample)) for sample in sample_files]
+
+
+
+rule all:
+	input:
+		"%s/ResFinder/%sResFinder_results.tsv" %(outdir, species)
+
+
+rule resfinder_db:
+	output:
+		db = directory("%s/resfinder/db" %db_dir)
+	shell:
+		"git clone https://bitbucket.org/genomicepidemiology/resfinder_db/ {output.db}"
+
+
+
+
+
+rule database_res_kma:
+	input:
+		db = rules.resfinder_db.output.db
+	output:
+		db_kma = directory("%s/resfinder/kma_indexing" %db_dir )
+	conda:
+		"envs/ResFinder.yaml"
+	threads:
+		workflow.cores
+	shell:
+		"""
+		mkdir {output.db_kma}
+		kma index -i {input.db}/fusidicacid.fsa -o {output.db_kma}/fusidicacid
+		kma index -i {input.db}/phenicol.fsa -o {output.db_kma}/phenicol
+		kma index -i {input.db}/glycopeptide.fsa -o {output.db_kma}/glycopeptide
+		kma index -i {input.db}/trimethoprim.fsa -o {output.db_kma}/trimethoprim
+		kma index -i {input.db}/oxazolidinone.fsa -o {output.db_kma}/oxazolidinone
+		kma index -i {input.db}/tetracycline.fsa -o {output.db_kma}/tetracycline
+		kma index -i {input.db}/quinolone.fsa -o {output.db_kma}/quinolone
+		kma index -i {input.db}/nitroimidazole.fsa -o {output.db_kma}/nitroimidazole
+		kma index -i {input.db}/fosfomycin.fsa -o {output.db_kma}/fosfomycin
+		kma index -i {input.db}/aminoglycoside.fsa -o {output.db_kma}/aminoglycoside
+		kma index -i {input.db}/macrolide.fsa -o {output.db_kma}/macrolide
+		kma index -i {input.db}/sulphonamide.fsa -o {output.db_kma}/sulphonamide
+		kma index -i {input.db}/rifampicin.fsa -o {output.db_kma}/rifampicin
+		kma index -i {input.db}/colistin.fsa -o {output.db_kma}/colistin
+		kma index -i {input.db}/beta-lactam.fsa -o {output.db_kma}/beta-lactam
+		"""
+
+
+rule disintfinder_db:
+	output:
+		db = directory("%s/disinfinder/db" %db_dir)
+	shell:
+		"git clone https://bitbucket.org/genomicepidemiology/disinfinder_db/ {output.db}"
+
+rule database_disint_kma:
+	input:
+		db = rules.disintfinder_db.output.db
+	output:
+		db_kma = directory("%s/disinfinder/kma_indexing" %db_dir)
+
+	conda:
+		"envs/ResFinder.yaml"
+	threads:
+		workflow.cores
+	shell:
+		"""
+		mkdir {output.db_kma}
+		kma index -i {input.db}/disinfectants.fsa -o {output.db_kma}/disinfectants
+		"""
+
+rule pointfinder_db:
+	output:
+		db = directory("%s/pointfinder/db" %db_dir)
+	shell:
+		"git clone https://bitbucket.org/genomicepidemiology/pointfinder_db/ {output.db}"
+
+
+rule database_point_kma:
+	input:
+		db = rules.pointfinder_db.output.db
+	output:
+		db_kma = directory("%s/pointfinder/kma_indexing" %db_dir)
+	conda:
+		"envs/ResFinder.yaml"
+	threads:
+		workflow.cores
+	shell:
+		"""
+		mkdir -p {output.db_kma}/campylobacter
+		kma index -i {input.db}/campylobacter/*.fsa -o {output.db_kma}/campylobacter/campylobacter
+		mkdir {output.db_kma}/escherichia_coli
+		kma index -i {input.db}/escherichia_coli/*.fsa -o {output.db_kma}/escherichia_coli/escherichia_coli
+		mkdir {output.db_kma}/enterococcus_faecalis
+		kma index -i {input.db}/enterococcus_faecalis/*.fsa -o {output.db_kma}/enterococcus_faecalis/enterococcus_faecalis
+		mkdir {output.db_kma}/enterococcus_faecium
+		kma index -i {input.db}/enterococcus_faecium/*.fsa -o {output.db_kma}/enterococcus_faecium/enterococcus_faecium
+		mkdir {output.db_kma}/neisseria_gonorrhoeae
+		kma index -i {input.db}/neisseria_gonorrhoeae/*.fsa -o {output.db_kma}/neisseria_gonorrhoeae/neisseria_gonorrhoeae
+		mkdir {output.db_kma}/salmonella
+		kma index -i {input.db}/salmonella/*.fsa -o {output.db_kma}/salmonella/salmonella
+		mkdir {output.db_kma}/mycobacterium_tuberculosis
+		kma index -i {input.db}/mycobacterium_tuberculosis/*.fsa -o {output.db_kma}/mycobacterium_tuberculosis/mycobacterium_tuberculosis
+		"""
+
+
+rule ResFinder_assemblies:
+	input:
+		assembly	= "%s/{sample}.fasta" %sample_dir,
+		db_res		= rules.resfinder_db.output.db,
+		db_res_kma	= rules.database_res_kma.output.db_kma,
+		db_disint	= rules.disintfinder_db.output.db,
+                db_disint_kma	= rules.database_disint_kma.output.db_kma,
+		db_point	= rules.pointfinder_db.output.db,
+                db_point_kma	= rules.database_point_kma.output.db_kma
+	params:
+		outdir = "%s/ResFinder/%s{sample}" %(outdir, species)
+	output:
+		results = "%s/ResFinder/%s{sample}/ResFinder_results_tab.txt" %(outdir, species)
+	conda:
+		"envs/ResFinder.yaml"
+	message:
+		"run_resfinder.py -o {params.outdir} -db_res {input.db_res} -db_res_kma {input.db_res_kma} -db_point {input.db_point} -db_point_kma {input.db_point_kma} -l 0.6 -t 0.8 --acquired -ifa {input.assembly}"
+	shell:
+                """
+		mkdir -p {params.outdir}
+		run_resfinder.py -o {params.outdir} -db_res {input.db_res} -db_res_kma {input.db_res_kma} -db_point {input.db_point} -db_point_kma {input.db_point_kma} -l 0.6 -t 0.8 --acquired -ifa {input.assembly}
+		"""
+
+
+rule ResFinder_reads:
+	input:
+		mate1		=	"%s/{sample}_R1.fastq.gz",
+		mate2		=	"%s/{sample}_R2.fastq.gz",
+		db_res          = rules.resfinder_db.output.db,
+		db_res_kma      = rules.database_res_kma.output.db_kma,
+		db_disint       = rules.disintfinder_db.output.db,
+		db_disint_kma   = rules.database_disint_kma.output.db_kma,
+		db_point        = rules.pointfinder_db.output.db,
+		db_point_kma    = rules.database_point_kma.output.db_kma
+	params:
+		outdir = "%s/ResFinder/%s{sample}" %(outdir, species)
+	output:
+		results = "%s/ResFinder/%s{sample}/ResFinder_results_tab.txt" %(outdir, species)
+	conda:
+		 "envs/ResFinder.yaml"
+	message:
+	shell:
+		"""
+		mkdir -p {params.outdir}
+		run_resfinder.py -o {params.outdir} -db_res {input.db_res} -db_res_kma {input.db_res_kma} -db_point {input.db_point} -db_point_kma {input.db_point_kma} -l 0.6 -t 0.    8 --acquired -ifq {input.mate1} {input.mate2}
+		"""
+
+rule summarise_ResFinder:
+	input:
+		res_assemblies	= expand(rules.ResFinder_assemblies.output.results, sample = sample_assemblies),
+		res_reads	= expand(rules.ResFinder_reads.output.results, sample = sample_reads)
+	params:
+		id_thresh = config["id_thresh"],
+		cov_thresh = config["cov_thresh"]
+	output:
+		resfinder_results = "%s/ResFinder/%sResFinder_results.tsv" %(outdir, species)
+	conda:
+		"envs/R.yaml"
+	script:
+		"scripts/summarise_resfinder.R"
