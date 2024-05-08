@@ -2,7 +2,8 @@ import glob, os, re
 
 configfile: "config/config.yaml"
 
-sample_dir = config["sample_dir"]
+assembly_dir = config["assembly_dir"]
+reads_dir = config["reads_dir"]
 db_dir = config["db_dir"]
 spe = config["species"]
 outdir = config["outdir"]
@@ -11,10 +12,10 @@ species = ""
 if spe is not None:
 	species = "%s/" %spe
 
-sample_files = glob.glob("%s/*fasta" %sample_dir)
-samples = [os.path.basename(re.sub(r"\.fasta", "", sample)) for sample in sample_files]
-
-
+assembly_files = glob.glob("%s/*fasta" %assembly_dir)
+reads_files = glob.glob("%s/*_R1.fastq.gz" %reads_dir)
+sample_assemblies = [os.path.basename(re.sub(r"\.fasta", "", sample)) for sample in assembly_files]
+sample_reads = [os.path.basename(re.sub(r"\_R1.fastq.gz", "", sample)) for sample in reads_files]
 
 rule all:
 	input:
@@ -26,9 +27,6 @@ rule resfinder_db:
 		db = directory("%s/resfinder/db" %db_dir)
 	shell:
 		"git clone https://bitbucket.org/genomicepidemiology/resfinder_db/ {output.db}"
-
-
-
 
 
 rule database_res_kma:
@@ -58,6 +56,8 @@ rule database_res_kma:
 		kma index -i {input.db}/rifampicin.fsa -o {output.db_kma}/rifampicin
 		kma index -i {input.db}/colistin.fsa -o {output.db_kma}/colistin
 		kma index -i {input.db}/beta-lactam.fsa -o {output.db_kma}/beta-lactam
+		kma index -i {input.db}/misc.fsa -o {output.db_kma}/misc
+		kma index -i {input.db}/pseudomonicacid.fsa -o {output.db_kma}/pseudomonicacid
 		"""
 
 
@@ -66,6 +66,7 @@ rule disintfinder_db:
 		db = directory("%s/disinfinder/db" %db_dir)
 	shell:
 		"git clone https://bitbucket.org/genomicepidemiology/disinfinder_db/ {output.db}"
+
 
 rule database_disint_kma:
 	input:
@@ -82,6 +83,7 @@ rule database_disint_kma:
 		mkdir {output.db_kma}
 		kma index -i {input.db}/disinfectants.fsa -o {output.db_kma}/disinfectants
 		"""
+
 
 rule pointfinder_db:
 	output:
@@ -120,7 +122,7 @@ rule database_point_kma:
 
 rule ResFinder_assemblies:
 	input:
-		assembly	= "%s/{sample}.fasta" %sample_dir,
+		assembly	= "%s/{sample}.fasta" %assembly_dir,
 		db_res		= rules.resfinder_db.output.db,
 		db_res_kma	= rules.database_res_kma.output.db_kma,
 		db_disint	= rules.disintfinder_db.output.db,
@@ -144,8 +146,8 @@ rule ResFinder_assemblies:
 
 rule ResFinder_reads:
 	input:
-		mate1		=	"%s/{sample}_R1.fastq.gz",
-		mate2		=	"%s/{sample}_R2.fastq.gz",
+		mate1		= "%s/{sample}_R1.fastq.gz" %reads_dir,
+		mate2		= "%s/{sample}_R2.fastq.gz" %reads_dir,
 		db_res          = rules.resfinder_db.output.db,
 		db_res_kma      = rules.database_res_kma.output.db_kma,
 		db_disint       = rules.disintfinder_db.output.db,
@@ -159,11 +161,13 @@ rule ResFinder_reads:
 	conda:
 		 "envs/ResFinder.yaml"
 	message:
+		"run_resfinder.py -o {params.outdir} -db_res {input.db_res} -db_res_kma {input.db_res_kma} -db_point {input.db_point} -db_point_kma {input.db_point_kma} -l 0.6 -t 0.8 --acquired -ifq {input.mate1} {input.mate2}"
 	shell:
 		"""
 		mkdir -p {params.outdir}
-		run_resfinder.py -o {params.outdir} -db_res {input.db_res} -db_res_kma {input.db_res_kma} -db_point {input.db_point} -db_point_kma {input.db_point_kma} -l 0.6 -t 0.    8 --acquired -ifq {input.mate1} {input.mate2}
+		run_resfinder.py -o {params.outdir} -db_res {input.db_res} -db_res_kma {input.db_res_kma} -db_point {input.db_point} -db_point_kma {input.db_point_kma} -l 0.6 -t 0.8 --acquired -ifq {input.mate1} {input.mate2}
 		"""
+
 
 rule summarise_ResFinder:
 	input:
@@ -178,3 +182,4 @@ rule summarise_ResFinder:
 		"envs/R.yaml"
 	script:
 		"scripts/summarise_resfinder.R"
+

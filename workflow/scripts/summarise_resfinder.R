@@ -70,8 +70,8 @@ write_summary <- function(res, outfile){
   }
 }
 
-import_all_res <- function(res_files, id_thresh, cov_thresh, columns, outfile){
-  res_import <- purrr::map_dfr(.x = res_files, .f = import_res, id_thresh = id_thresh, cov_thresh = cov_thresh, columns = columns)
+import_all_res <- function(res_assemblies, res_reads, id_thresh, cov_thresh, columns, outfile){
+  res_import <- purrr::map_dfr(.x = c(res_assemblies, res_reads), .f = import_res, id_thresh = id_thresh, cov_thresh = cov_thresh, columns = columns)
   
   res_summarised <- dplyr::arrange(res_import, class, res_gene) %>%
     summarise_resfinder
@@ -90,7 +90,8 @@ save(snakemake, file = "snakemake.RData")
 
 
 import_all_res(
-  res_files = snakemake@input[["res_files"]],
+  res_assemblies = snakemake@input[["res_assemblies"]],
+  res_reads = snakemake@input[["res_reads"]],
   id_thresh = snakemake@params[["id_thresh"]],
   cov_thresh = snakemake@params[["cov_thresh"]],
   outfile = snakemake@output[["resfinder_results"]],
